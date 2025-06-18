@@ -1,0 +1,55 @@
+# .github/workflows/sync-fedramp-dist-content.yml
+name: Sync FedRAMP dist/content → fedramp
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * *'  # daily at 04:00 UTC
+
+permissions:
+  contents: write  # allow commits via GITHUB_TOKEN
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # 1) Checkout YOUR repo, with write perms
+      - name: Checkout target repo
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: true
+
+      # 2) Sparse-checkout just dist/content from the FedRAMP Automation repo
+      - name: Checkout FedRAMP Automation (sparse)
+        uses: actions/checkout@v3
+        with:
+          repository: GSA/fedramp-automation
+          path: fedramp-automation
+          fetch-depth: 1
+          sparse-checkout: |
+            dist/content
+
+      # 3) Move the checked-out content into your repo as `fedramp/`
+      - name: Populate `fedramp/` folder
+        run: |
+          rm -rf fedramp
+          mv fedramp-automation/dist/content fedramp
+          # clean up
+          rm -rf fedramp-automation
+
+      # 4) Debug: show what changed (optional)
+      - name: Show git status & diff
+        run: |
+          git status
+          git diff --name-status
+
+      # 5) Commit & push only if there are changes
+      - name: Commit & push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add fedramp
+          git diff --staged --quiet || (
+            git commit -m "chore: sync FedRAMP dist/content → fedramp (upstream)" &&
+            git push
+          )
